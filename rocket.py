@@ -32,7 +32,7 @@ def createRocket(space):
     bodyRocket = pymunk.Body()
     bodyRocket.position = (WIDTH / 2, HEIGHT / 2)
     shapeRocket = pymunk.Poly.create_box(bodyRocket, (20, 100))
-    shapeRocket.mass = 1
+    shapeRocket.mass = 0.8
     shapeRocket.elasticity = 0.5
     shapeRocket.friction = 1
     shapeRocket.filter = pymunk.ShapeFilter(group=COLL_GROUP_ROCKET)
@@ -40,9 +40,9 @@ def createRocket(space):
 
     #Thruster
     bodyThruster = pymunk.Body(body_type=pymunk.Body.DYNAMIC)
-    bodyThruster.position = (WIDTH / 2 + 30, HEIGHT / 2 + 30)
+    bodyThruster.position = (WIDTH / 2, HEIGHT / 2 + 100)
     shapeThruster = pymunk.Poly.create_box(bodyThruster, (10, 25))
-    shapeThruster.mass = 1
+    shapeThruster.mass = 0.2
     shapeThruster.elasticity = 1
     shapeThruster.friction = 0.1
     shapeThruster.filter = pymunk.ShapeFilter(group=COLL_GROUP_ROCKET)
@@ -75,11 +75,10 @@ def run(window, width, height):
     rocket, thrusterBody, pivotMotor = createRocket(space)
 
     #Thruster variables
-    thrusterForce = 1962 
+    thrusterForce = 981
     pivotRate     = 0
 
     while running:
-        thrusterBody.apply_force_at_local_point((0,-thrusterForce), (0,0))
         pivotMotor.rate = 0
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -91,12 +90,15 @@ def run(window, width, height):
                     running = False
                 if event.key == pygame.K_LEFT:
                     # Applies rate for only 1 frame
-                    pivotMotor.rate = -5
-                    pivotRate = pivotRate - 5
+                    pivotMotor.rate = -2
+                    pivotRate = pivotRate - 2
                 if event.key == pygame.K_RIGHT:
                     # Applies rate for only 1 frame
-                    pivotMotor.rate = 5
-                    pivotRate = pivotRate + 5
+                    pivotMotor.rate = 2
+                    pivotRate = pivotRate + 2
+                    
+        
+        thrusterBody.apply_force_at_local_point((0,-thrusterForce), (0,0))
 
         draw(space, window)
         space.step(1 / fps)
