@@ -6,8 +6,9 @@ pygame.init()
 
 pivotMotor = 0
 
-WIDTH, HEIGHT = 900, 900
+WIDTH, HEIGHT = 1200, 900
 COLL_GROUP_ROCKET = 4
+FPS = 60
 window = pygame.display.set_mode((WIDTH, HEIGHT))
 
 def draw(space, window):
@@ -27,59 +28,102 @@ def createFloor(space):
     space.add(body, shape)
     return shape
 
-def createRocket(space):
-    #rocket
-    bodyRocket = pymunk.Body()
-    bodyRocket.position = (WIDTH / 2, HEIGHT / 2)
-    shapeRocket = pymunk.Poly.create_box(bodyRocket, (20, 100))
-    shapeRocket.mass = 0.8
-    shapeRocket.elasticity = 0.5
-    shapeRocket.friction = 1
-    shapeRocket.filter = pymunk.ShapeFilter(group=COLL_GROUP_ROCKET)
-    shapeRocket.color  = (0, 0, 255, 100)
+class Rocket:
 
-    #Thruster
-    bodyThruster = pymunk.Body(body_type=pymunk.Body.DYNAMIC)
-    bodyThruster.position = (WIDTH / 2, HEIGHT / 2 + 100)
-    shapeThruster = pymunk.Poly.create_box(bodyThruster, (10, 25))
-    shapeThruster.mass = 0.2
-    shapeThruster.elasticity = 1
-    shapeThruster.friction = 0.1
-    shapeThruster.filter = pymunk.ShapeFilter(group=COLL_GROUP_ROCKET)
-    shapeThruster.color = (0, 0, 0, 100)
+    thrustSetpoint = 0
+    thrustActual   = 0
+    thrustIncS     = 150
+    thrustMax      = 200
 
-    #Stitch them together with pivot joint and motor
-    aRocket = (0, 50)
-    aThruster = (0, 0)
-    joint = pymunk.PivotJoint(bodyRocket, bodyThruster, aRocket, aThruster)
-    pivotMotor = pymunk.SimpleMotor(bodyRocket, bodyThruster, 0)
+    pivotSetpoint  = 0
+    pivotActual    = 0
+    pivotRate      = 2
+    pivotMax       = 1   #1 radian
+
+    def __init__(self, space, pos):
+        #Rocket init
+        self.bodyRocket = pymunk.Body()
+        self.bodyRocket.position = (WIDTH / 2, HEIGHT / 2)
+        self.shapeRocket = pymunk.Poly.create_box(self.bodyRocket, (20, 100))
+        self.shapeRocket.mass = 0.8
+        self.shapeRocket.elasticity = 0.5
+        self.shapeRocket.friction = 1
+        self.shapeRocket.filter = pymunk.ShapeFilter(group=COLL_GROUP_ROCKET)
+        self.shapeRocket.color  = (0, 0, 255, 100)
+
+        #Thruster
+        self.bodyThruster = pymunk.Body(body_type=pymunk.Body.DYNAMIC) 
+        self.bodyThruster.position = (WIDTH / 2, HEIGHT / 2 + 100)
+        self.shapeThruster = pymunk.Poly.create_box(self.bodyThruster, (10, 25))
+        self.shapeThruster.mass = 0.2
+        self.shapeThruster.elasticity = 1
+        self.shapeThruster.friction = 0.1
+        self.shapeThruster.filter = pymunk.ShapeFilter(group=COLL_GROUP_ROCKET)
+        self.shapeThruster.color = (0, 0, 0, 100)
+
+        #Stitch them together with pivot joint and motor
+        aRocket = (0, 50)
+        aThruster = (0, 0)
+        self.joint = pymunk.PivotJoint(self.bodyRocket, self.bodyThruster, aRocket, aThruster)
+        self.pivotMotor = pymunk.SimpleMotor(self.bodyRocket, self.bodyThruster, 0)
     
+        space.add(self.bodyRocket,   self.shapeRocket)
+        space.add(self.bodyThruster, self.shapeThruster)
+        space.add(self.pivotMotor)
+        space.add(self.joint)
 
-    space.add(bodyRocket,   shapeRocket)
-    space.add(bodyThruster, shapeThruster)
-    space.add(pivotMotor)
-    space.add(joint)
-    return shapeRocket, bodyThruster, pivotMotor
+    def setPivot(self, angle):
+        if (angle >= -(self.pivotMax)) and (angle <= self.pivotMax):
+            self.pivotSetpoint = angle
 
+    def setThrust(self, thrust):
+        if thrust <= self.thrustMax and thrust >= 0:
+            self.thrustSetpoint = thrust
+
+    def handle(self):
+        #Thruster handling
+        if (self.thrustSetpoint - self.thrustActual) > (self.thrustIncS / FPS):
+            self.thrustActual += self.thrustIncS / FPS
+        elif (self.thrustSetpoint - self.thrustActual) < -(self.thrustIncS / FPS):
+            self.thrustActual -= self.thrustIncS / FPS
+        else:
+            self.thrustActual = self.thrustSetpoint
+        red = (self.thrustActual / self.thrustMax) * 255 
+        self.shapeThruster.color = (red, 0, 0, 100)
+
+        #Pivotmotor handling
+        if self.pivotActual != self.pivotSetpoint:
+            if self.pivotSetpoint < self.pivotActual:
+                self.pivotMotor.rate = -(self.pivotRate)
+                self.pivotActual -= self.pivotRate * (1 / FPS)
+            elif self.pivotSetpoint > self.pivotActual:
+                self.pivotMotor.rate = self.pivotRate
+                self.pivotActual += self.pivotRate * (1 / FPS)
+        else:
+            self.pivotMotor.rate = 0         
+
+        self.bodyThruster.apply_force_at_local_point((0,-(self.thrustActual)), (0,0))
+
+        print("Thrust: ", self.thrustActual)
+        print("Pivot: ", self.pivotActual)
 
 def run(window, width, height):
     running = True
     clock = pygame.time.Clock()
-    fps = 60
   
+    font = pygame.font.SysFont("Arial", 20)
+
     # Our pymunk space
     space = pymunk.Space()
-    space.gravity = (0, 981)
+    space.gravity = (0, 100)
 
-    floor = createFloor(space)
-    rocket, thrusterBody, pivotMotor = createRocket(space)
+    floor  = createFloor(space)
+    rocket = Rocket(space,(WIDTH / 2, HEIGHT / 2))
 
-    #Thruster variables
-    thrusterForce = 981
-    pivotRate     = 0
+    currentPivot  = 0
+    currentThrust = 0
 
     while running:
-        pivotMotor.rate = 0
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -90,19 +134,24 @@ def run(window, width, height):
                     running = False
                 if event.key == pygame.K_LEFT:
                     # Applies rate for only 1 frame
-                    pivotMotor.rate = -2
-                    pivotRate = pivotRate - 2
+                    currentPivot -= 0.1
                 if event.key == pygame.K_RIGHT:
                     # Applies rate for only 1 frame
-                    pivotMotor.rate = 2
-                    pivotRate = pivotRate + 2
-                    
+                    currentPivot += 0.1
+                if event.key == pygame.K_UP:
+                    currentThrust += 10
+                if event.key == pygame.K_DOWN:
+                    currentThrust -= 10
+
+        rocket.setPivot(currentPivot)
+        rocket.setThrust(currentThrust)
         
-        thrusterBody.apply_force_at_local_point((0,-thrusterForce), (0,0))
+        # Does all rocket related tasks per frame             
+        rocket.handle()
 
         draw(space, window)
-        space.step(1 / fps)
-        clock.tick(fps)
+        space.step(1 / FPS)
+        clock.tick(FPS)
 
     pygame.quit()
 
