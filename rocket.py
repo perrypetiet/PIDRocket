@@ -32,8 +32,8 @@ class Rocket:
 
     thrustSetpoint = 0
     thrustActual   = 0
-    thrustIncS     = 150
-    thrustMax      = 200
+    thrustIncS     = 5000
+    thrustMax      = 5000
 
     pivotSetpoint  = 0
     pivotActual    = 0
@@ -83,6 +83,16 @@ class Rocket:
     def setThrust(self, thrust):
         if thrust <= self.thrustMax and thrust >= 0:
             self.thrustSetpoint = thrust
+        elif thrust > self.thrustMax:
+            self.thrustSetpoint = self.thrustMax
+        elif thrust < 0:
+            self.thrustSetpoint = 0
+
+    def getSpeedX(self):
+        return self.speedX
+
+    def getSpeedY(self):
+        return self.speedY
 
     def handle(self):
         #Thruster handling
@@ -109,11 +119,22 @@ class Rocket:
         self.bodyThruster.apply_force_at_local_point((0,-(self.thrustActual)), (0,0))
 
         #Calculate speed:
-        self.speedY = -(self.posOld[0] - self.bodyRocket.position[0]) * FPS
-        self.speedX =  (self.posOld[1] - self.bodyRocket.position[1]) * FPS
+        self.speedX = -(self.posOld[0] - self.bodyRocket.position[0]) * FPS
+        self.speedY =  (self.posOld[1] - self.bodyRocket.position[1]) * FPS
 
         self.posOld = self.bodyRocket.position
-        print(self.speedX, self.speedY)
+        #print(self.speedX, self.speedY)
+
+def PIDthrust(rocket, speedSetpoint):
+    kP    = 50      #Proportional gain.
+    print(rocket.getSpeedY())
+    
+    error = speedSetpoint - rocket.getSpeedY()
+    p = kP * error
+
+    rocket.setThrust(p)
+
+    return
 
 def run(window, width, height):
     running = True
@@ -125,9 +146,9 @@ def run(window, width, height):
 
     floor  = createFloor(space)
     rocket = Rocket(space,(WIDTH / 2, HEIGHT / 2 + 100))
+    rocket.setThrust(90)
 
     currentPivot  = 0
-    currentThrust = 90
 
     while running:
         # Does all rocket related tasks per frame             
@@ -146,13 +167,12 @@ def run(window, width, height):
                 if event.key == pygame.K_RIGHT:
                     # Applies rate for only 1 frame
                     currentPivot += 0.1
-                if event.key == pygame.K_UP:
-                    currentThrust += 10
-                if event.key == pygame.K_DOWN:
-                    currentThrust -= 10
+        #For pid, the input is the speed of the rocket, the process value is speed in pixels/s 
+        # and the output is thrust(force) or pivot(angle)
 
         rocket.setPivot(currentPivot)
-        rocket.setThrust(currentThrust)
+        #rocket.setThrust(currentThrust)
+        PIDthrust(rocket, 0) # Speed setpoint is 0
 
         draw(space, window)
         space.step(1 / FPS)
