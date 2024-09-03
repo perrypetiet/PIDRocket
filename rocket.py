@@ -40,10 +40,14 @@ class Rocket:
     pivotRate      = 2
     pivotMax       = 1   #1 radian
 
+    posOld = (0, 0)
+    speedY = 0
+    speedX = 0
+
     def __init__(self, space, pos):
         #Rocket init
         self.bodyRocket = pymunk.Body()
-        self.bodyRocket.position = (WIDTH / 2, HEIGHT / 2)
+        self.bodyRocket.position = pos
         self.shapeRocket = pymunk.Poly.create_box(self.bodyRocket, (20, 100))
         self.shapeRocket.mass = 0.8
         self.shapeRocket.elasticity = 0.5
@@ -104,26 +108,30 @@ class Rocket:
 
         self.bodyThruster.apply_force_at_local_point((0,-(self.thrustActual)), (0,0))
 
-        print("Thrust: ", self.thrustActual)
-        print("Pivot: ", self.pivotActual)
+        #Calculate speed:
+        self.speedY = -(self.posOld[0] - self.bodyRocket.position[0]) * FPS
+        self.speedX =  (self.posOld[1] - self.bodyRocket.position[1]) * FPS
+
+        self.posOld = self.bodyRocket.position
+        print(self.speedX, self.speedY)
 
 def run(window, width, height):
     running = True
     clock = pygame.time.Clock()
-  
-    font = pygame.font.SysFont("Arial", 20)
 
     # Our pymunk space
     space = pymunk.Space()
     space.gravity = (0, 100)
 
     floor  = createFloor(space)
-    rocket = Rocket(space,(WIDTH / 2, HEIGHT / 2))
+    rocket = Rocket(space,(WIDTH / 2, HEIGHT / 2 + 100))
 
     currentPivot  = 0
-    currentThrust = 0
+    currentThrust = 90
 
     while running:
+        # Does all rocket related tasks per frame             
+        rocket.handle()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -145,9 +153,6 @@ def run(window, width, height):
 
         rocket.setPivot(currentPivot)
         rocket.setThrust(currentThrust)
-        
-        # Does all rocket related tasks per frame             
-        rocket.handle()
 
         draw(space, window)
         space.step(1 / FPS)
