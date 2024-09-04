@@ -4,7 +4,9 @@ import pymunk.pygame_util
 
 pygame.init()
 
-pivotMotor = 0
+# temp here:
+iTotal = 0
+errorP = 0
 
 WIDTH, HEIGHT = 1200, 900
 COLL_GROUP_ROCKET = 4
@@ -33,7 +35,7 @@ class Rocket:
     thrustSetpoint = 0
     thrustActual   = 0
     thrustIncS     = 5000
-    thrustMax      = 5000
+    thrustMax      = 2000
 
     pivotSetpoint  = 0
     pivotActual    = 0
@@ -43,6 +45,8 @@ class Rocket:
     posOld = (0, 0)
     speedY = 0
     speedX = 0
+    speedYOld = 0
+    speedXOld = 0
 
     def __init__(self, space, pos):
         #Rocket init
@@ -57,7 +61,7 @@ class Rocket:
 
         #Thruster
         self.bodyThruster = pymunk.Body(body_type=pymunk.Body.DYNAMIC) 
-        self.bodyThruster.position = (WIDTH / 2, HEIGHT / 2 + 100)
+        self.bodyThruster.position = (pos[0], pos[1] + 100)
         self.shapeThruster = pymunk.Poly.create_box(self.bodyThruster, (10, 25))
         self.shapeThruster.mass = 0.2
         self.shapeThruster.elasticity = 1
@@ -90,9 +94,15 @@ class Rocket:
 
     def getSpeedX(self):
         return self.speedX
+    
+    def getSpeedXOld(self):
+        return self.speedXOld
 
     def getSpeedY(self):
         return self.speedY
+    
+    def getSpeedYOld(self):
+        return self.speedYOld
 
     def handle(self):
         #Thruster handling
@@ -119,6 +129,9 @@ class Rocket:
         self.bodyThruster.apply_force_at_local_point((0,-(self.thrustActual)), (0,0))
 
         #Calculate speed:
+        self.speedXOld = self.speedX
+        self.speedYOld = self.speedY
+
         self.speedX = -(self.posOld[0] - self.bodyRocket.position[0]) * FPS
         self.speedY =  (self.posOld[1] - self.bodyRocket.position[1]) * FPS
 
@@ -126,14 +139,25 @@ class Rocket:
         #print(self.speedX, self.speedY)
 
 def PIDthrust(rocket, speedSetpoint):
-    kP    = 50      #Proportional gain.
-    print(rocket.getSpeedY())
-    
     error = speedSetpoint - rocket.getSpeedY()
+    print(rocket.getSpeedY())
+    # *** Proportional factor *****
+    kP = 30    #Proportional gain
     p = kP * error
 
-    rocket.setThrust(p)
+    # *** Integral factor *********
+    kI = 2
+    i = kI * error * (1 / FPS)
+    global iTotal
+    iTotal += i
 
+    # *** Derivative factor *******
+    global errorP
+    kD = 0.6
+    d = kD * (error - errorP) / (1 / FPS)
+
+    errorP = error
+    rocket.setThrust(p + iTotal + d)
     return
 
 def run(window, width, height):
@@ -142,11 +166,11 @@ def run(window, width, height):
 
     # Our pymunk space
     space = pymunk.Space()
-    space.gravity = (0, 100)
+    space.gravity = (0, 500)
 
     floor  = createFloor(space)
-    rocket = Rocket(space,(WIDTH / 2, HEIGHT / 2 + 100))
-    rocket.setThrust(90)
+    rocket = Rocket(space,(WIDTH / 2, HEIGHT / 2 - 200))
+    rocket.setThrust(0)
 
     currentPivot  = 0
 
