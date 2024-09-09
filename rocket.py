@@ -4,10 +4,6 @@ import pymunk.pygame_util
 
 pygame.init()
 
-# temp here:
-iTotal = 0
-errorP = 0
-
 WIDTH, HEIGHT = 1200, 900
 COLL_GROUP_ROCKET = 4
 FPS = 240
@@ -34,26 +30,24 @@ class Rocket:
 
     thrustSetpoint = 0
     thrustActual   = 0
-    thrustIncS     = 80000
-    thrustMax      = 100000
+    thrustIncS     = 1700
+    thrustMax      = 2000
 
     pivotSetpoint  = 0
     pivotActual    = 0
-    pivotRate      = 2
-    pivotMax       = 1   #1 radian
+    pivotRate      = 10
+    pivotMax       = 0.3
 
     posOld = (0, 0)
     speedY = 0
     speedX = 0
-    speedYOld = 0
-    speedXOld = 0
 
     def __init__(self, space, pos):
         #Rocket init
         self.bodyRocket = pymunk.Body()
         self.bodyRocket.position = pos
         self.shapeRocket = pymunk.Poly.create_box(self.bodyRocket, (20, 100))
-        self.shapeRocket.mass = 20
+        self.shapeRocket.mass = 1
         self.shapeRocket.elasticity = 0.5
         self.shapeRocket.friction = 1
         self.shapeRocket.filter = pymunk.ShapeFilter(group=COLL_GROUP_ROCKET)
@@ -63,7 +57,7 @@ class Rocket:
         self.bodyThruster = pymunk.Body(body_type=pymunk.Body.DYNAMIC) 
         self.bodyThruster.position = (pos[0], pos[1] + 100)
         self.shapeThruster = pymunk.Poly.create_box(self.bodyThruster, (10, 25))
-        self.shapeThruster.mass = 8
+        self.shapeThruster.mass = 1
         self.shapeThruster.elasticity = 1
         self.shapeThruster.friction = 0.1
         self.shapeThruster.filter = pymunk.ShapeFilter(group=COLL_GROUP_ROCKET)
@@ -81,8 +75,13 @@ class Rocket:
         space.add(self.joint)
 
     def setPivot(self, angle):
+        angle = angle / 1000
         if (angle >= -(self.pivotMax)) and (angle <= self.pivotMax):
             self.pivotSetpoint = angle
+        elif angle < -(self.pivotMax):
+            self.pivotSetpoint = -(self.pivotMax)
+        elif angle > self.pivotMax:
+            self.pivotSetpoint = self.pivotMax
 
     def setThrust(self, thrust):
         if thrust <= self.thrustMax and thrust >= 0:
@@ -104,6 +103,7 @@ class Rocket:
     def getSpeedYOld(self):
         return self.speedYOld
 
+    # Should be called every frame
     def handle(self):
         #Thruster handling
         if (self.thrustSetpoint - self.thrustActual) > (self.thrustIncS / FPS):
@@ -128,15 +128,10 @@ class Rocket:
 
         self.bodyThruster.apply_force_at_local_point((0,-(self.thrustActual)), (0,0))
 
-        #Calculate speed:
-        self.speedXOld = self.speedX
-        self.speedYOld = self.speedY
-
         self.speedX = -(self.posOld[0] - self.bodyRocket.position[0]) * FPS
         self.speedY =  (self.posOld[1] - self.bodyRocket.position[1]) * FPS
 
         self.posOld = self.bodyRocket.position
-        #print(self.speedX, self.speedY)
 
 class PID():
     kP = 0
@@ -155,13 +150,14 @@ class PID():
     
     def run(self, PIDInput, dTime):
         error = self.setpoint - PIDInput
-        #print(PIDInput)
         p = self.kP * error
-        i = self.kI * error * dTime
-        self.iTotal += i
+        self.iTotal += error * dTime
+        #print(self.iTotal)
+        i = self.iTotal * self.kI
         d = self.kD * (error - self.errorP) / dTime
         self.errorP = error
-        return (p + self.iTotal + d)
+        output = p + i + d
+        return output
 
 def run(window, width, height):
     running = True
@@ -169,17 +165,18 @@ def run(window, width, height):
 
     # Our pymunk space
     space = pymunk.Space()
-    space.gravity = (0, 981)
+    space.gravity = (0, 100)
 
-    floor  = createFloor(space)
+    #createFloor(space)
     rocket = Rocket(space,(WIDTH / 2, HEIGHT / 2))
-    pidThrust = PID(800, 48, 200)
-    pidThrust.setSetpoint(20)
-    currentPivot  = 0
-  
+    pidThrust = PID(300, 1, 40)
+    pidAngle  = PID(10,   0,  0.2)
+    pidThrust.setSetpoint(0)
+    pidAngle.setSetpoint(0.01)  
+
     while running:
         # Does all rocket related tasks per frame             
-        rocket.handle()
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -188,18 +185,15 @@ def run(window, width, height):
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
-                if event.key == pygame.K_LEFT:
-                    # Applies rate for only 1 frame
-                    currentPivot -= 0.1
-                if event.key == pygame.K_RIGHT:
-                    # Applies rate for only 1 frame
-                    currentPivot += 0.1
-        #For pid, the input is the speed of the rocket, the process value is speed in pixels/s 
+
+        # For pid, the input is the speed of the rocket, the process value is speed in pixels/s 
         # and the output is thrust(force) or pivot(angle)
+        output = pidAngle.run(rocket.bodyRocket.angle, (1 / FPS))
+        rocket.setPivot(output)
+        print(rocket.bodyRocket.angle)
 
-        rocket.setPivot(currentPivot)
-        rocket.setThrust(pidThrust.run(rocket.getSpeedY(), (1/FPS)))
-
+        rocket.setThrust(pidThrust.run(rocket.getSpeedY(), (1 / FPS)))
+        rocket.handle()
         draw(space, window)
         space.step(1 / FPS)
         clock.tick(FPS)
