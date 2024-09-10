@@ -36,7 +36,7 @@ class Rocket:
     pivotSetpoint  = 0
     pivotActual    = 0
     pivotRate      = 10
-    pivotMax       = 1
+    pivotMax       = 2
 
     posOld = (0, 0)
     speedY = 0
@@ -161,6 +161,26 @@ class PID():
         output = p + i + d
         return output
 
+class Controller():
+
+    def __init__(self, rocket):
+        self.rocket = rocket
+        self.pidSpeedY = PID(600, 4.1, 60)
+        self.pidAngle  = PID(480, 1,   200)
+
+    def angleSetpoint(self, setpoint):
+        self.pidAngle.setSetpoint(setpoint)
+
+    def ySpeedSetpoint(self, setpoint):
+        self.pidSpeedY.setSetpoint(setpoint)
+
+    def handle(self):
+        outputPivot  = self.pidAngle.run(self.rocket.bodyRocket.angle, (1 / FPS))
+        outputThrust = self.pidSpeedY.run(self.rocket.getSpeedY(), (1 / FPS))
+        self.rocket.setPivot(outputPivot)
+        self.rocket.setThrust(outputThrust)
+        return
+
 def run(window, width, height):
     running = True
     clock = pygame.time.Clock()
@@ -169,16 +189,19 @@ def run(window, width, height):
     space = pymunk.Space()
     space.gravity = (0, 981)
 
+    setpointY     = 0
+    setpointAngle = 0
+
     createFloor(space)
     rocket = Rocket(space,(WIDTH / 2, HEIGHT / 2))
-    pidThrust = PID(800, 2, 60)
-    pidAngle  = PID(280, 0, 10)
-    pidThrust.setSetpoint(0)
-    pidAngle.setSetpoint(0.1)  
+    controller = Controller(rocket)
+    
+    
 
     while running:
         # Does all rocket related tasks per frame             
-        
+        controller.angleSetpoint(setpointAngle)
+        controller.ySpeedSetpoint(setpointY)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -187,16 +210,19 @@ def run(window, width, height):
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
+                if event.key == pygame.K_UP:
+                    setpointY += 5
+                if event.key == pygame.K_DOWN:
+                    setpointY -= 5
+                if event.key == pygame.K_LEFT:
+                    setpointAngle -= 0.05
+                if event.key == pygame.K_RIGHT:
+                    setpointAngle += 0.05
 
-        # For pid, the input is the speed of the rocket, the process value is speed in pixels/s 
-        # and the output is thrust(force) or pivot(angle)
-        outputPivot  = pidAngle.run(rocket.bodyRocket.angle, (1 / FPS))
-        outputThrust = pidThrust.run(rocket.getSpeedY(), (1 / FPS))
-        rocket.setPivot(outputPivot)
-        rocket.setThrust(outputThrust)
-
-        print(rocket.bodyRocket.angle, rocket.getSpeedY())
+        controller.handle()
         rocket.handle()
+        print(rocket.bodyRocket.angle, rocket.getSpeedY())
+        
         draw(space, window)
         space.step(1 / FPS)
         clock.tick(FPS)
