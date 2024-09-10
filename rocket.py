@@ -21,7 +21,7 @@ def createFloor(space):
     body.position = pos
     shape = pymunk.Poly.create_box(body, size)
     shape.color = (0, 100, 0, 100)
-    shape.elasticity = 0.001
+    shape.elasticity = 0.0001
     shape.friction = 0.3
     space.add(body, shape)
     return shape
@@ -30,13 +30,13 @@ class Rocket:
 
     thrustSetpoint = 0
     thrustActual   = 0
-    thrustIncS     = 1700
-    thrustMax      = 2000
+    thrustIncS     = 5000
+    thrustMax      = 5000
 
     pivotSetpoint  = 0
     pivotActual    = 0
     pivotRate      = 10
-    pivotMax       = 0.3
+    pivotMax       = 1
 
     posOld = (0, 0)
     speedY = 0
@@ -58,7 +58,7 @@ class Rocket:
         self.bodyThruster.position = (pos[0], pos[1] + 100)
         self.shapeThruster = pymunk.Poly.create_box(self.bodyThruster, (10, 25))
         self.shapeThruster.mass = 1
-        self.shapeThruster.elasticity = 1
+        self.shapeThruster.elasticity = 0.01
         self.shapeThruster.friction = 0.1
         self.shapeThruster.filter = pymunk.ShapeFilter(group=COLL_GROUP_ROCKET)
         self.shapeThruster.color = (0, 0, 0, 100)
@@ -74,8 +74,9 @@ class Rocket:
         space.add(self.pivotMotor)
         space.add(self.joint)
 
+    # Set the desired pivot angle of the thruster.
     def setPivot(self, angle):
-        angle = angle / 1000
+        angle = angle / 100
         if (angle >= -(self.pivotMax)) and (angle <= self.pivotMax):
             self.pivotSetpoint = angle
         elif angle < -(self.pivotMax):
@@ -83,6 +84,7 @@ class Rocket:
         elif angle > self.pivotMax:
             self.pivotSetpoint = self.pivotMax
 
+    # Set the desired upwards thrust.
     def setThrust(self, thrust):
         if thrust <= self.thrustMax and thrust >= 0:
             self.thrustSetpoint = thrust
@@ -105,16 +107,6 @@ class Rocket:
 
     # Should be called every frame
     def handle(self):
-        #Thruster handling
-        if (self.thrustSetpoint - self.thrustActual) > (self.thrustIncS / FPS):
-            self.thrustActual += self.thrustIncS / FPS
-        elif (self.thrustSetpoint - self.thrustActual) < -(self.thrustIncS / FPS):
-            self.thrustActual -= self.thrustIncS / FPS
-        else:
-            self.thrustActual = self.thrustSetpoint
-        red = (self.thrustActual / self.thrustMax) * 255 
-        self.shapeThruster.color = (red, 0, 0, 100)
-
         #Pivotmotor handling
         if self.pivotActual != self.pivotSetpoint:
             if self.pivotSetpoint < self.pivotActual:
@@ -125,6 +117,16 @@ class Rocket:
                 self.pivotActual += self.pivotRate * (1 / FPS)
         else:
             self.pivotMotor.rate = 0         
+
+        #Thruster handling
+        if (self.thrustSetpoint - self.thrustActual) > (self.thrustIncS / FPS):
+            self.thrustActual += self.thrustIncS / FPS
+        elif (self.thrustSetpoint - self.thrustActual) < -(self.thrustIncS / FPS):
+            self.thrustActual -= self.thrustIncS / FPS
+        else:
+            self.thrustActual = self.thrustSetpoint
+        red = (self.thrustActual / self.thrustMax) * 255 
+        self.shapeThruster.color = (red, 0, 0, 100)
 
         self.bodyThruster.apply_force_at_local_point((0,-(self.thrustActual)), (0,0))
 
@@ -165,14 +167,14 @@ def run(window, width, height):
 
     # Our pymunk space
     space = pymunk.Space()
-    space.gravity = (0, 100)
+    space.gravity = (0, 981)
 
-    #createFloor(space)
+    createFloor(space)
     rocket = Rocket(space,(WIDTH / 2, HEIGHT / 2))
-    pidThrust = PID(300, 1, 40)
-    pidAngle  = PID(10,   0,  0.2)
+    pidThrust = PID(800, 2, 60)
+    pidAngle  = PID(280, 0, 10)
     pidThrust.setSetpoint(0)
-    pidAngle.setSetpoint(0.01)  
+    pidAngle.setSetpoint(0.1)  
 
     while running:
         # Does all rocket related tasks per frame             
@@ -188,11 +190,12 @@ def run(window, width, height):
 
         # For pid, the input is the speed of the rocket, the process value is speed in pixels/s 
         # and the output is thrust(force) or pivot(angle)
-        output = pidAngle.run(rocket.bodyRocket.angle, (1 / FPS))
-        rocket.setPivot(output)
-        print(rocket.bodyRocket.angle)
+        outputPivot  = pidAngle.run(rocket.bodyRocket.angle, (1 / FPS))
+        outputThrust = pidThrust.run(rocket.getSpeedY(), (1 / FPS))
+        rocket.setPivot(outputPivot)
+        rocket.setThrust(outputThrust)
 
-        rocket.setThrust(pidThrust.run(rocket.getSpeedY(), (1 / FPS)))
+        print(rocket.bodyRocket.angle, rocket.getSpeedY())
         rocket.handle()
         draw(space, window)
         space.step(1 / FPS)
