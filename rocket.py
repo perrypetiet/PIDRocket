@@ -55,7 +55,7 @@ class Rocket:
 
         #Thruster
         self.bodyThruster = pymunk.Body(body_type=pymunk.Body.DYNAMIC) 
-        self.bodyThruster.position = (pos[0], pos[1] + 100)
+        self.bodyThruster.position = (pos[0], pos[1] + 50)
         self.shapeThruster = pymunk.Poly.create_box(self.bodyThruster, (10, 25))
         self.shapeThruster.mass = 1
         self.shapeThruster.elasticity = 0.01
@@ -165,8 +165,9 @@ class Controller():
 
     def __init__(self, rocket):
         self.rocket = rocket
+
         self.pidSpeedY = PID(600, 4.1, 60)
-        self.pidAngle  = PID(480, 1,   200)
+        self.pidAngle  = PID(100, 0,   2)
 
     def angleSetpoint(self, setpoint):
         self.pidAngle.setSetpoint(setpoint)
@@ -175,8 +176,9 @@ class Controller():
         self.pidSpeedY.setSetpoint(setpoint)
 
     def handle(self):
-        outputPivot  = self.pidAngle.run(self.rocket.bodyRocket.angle, (1 / FPS))
         outputThrust = self.pidSpeedY.run(self.rocket.getSpeedY(), (1 / FPS))
+        outputPivot  = self.pidAngle.run(self.rocket.bodyRocket.angle, (1 / FPS))
+        
         self.rocket.setPivot(outputPivot)
         self.rocket.setThrust(outputThrust)
         return
@@ -189,15 +191,13 @@ def run(window, width, height):
     space = pymunk.Space()
     space.gravity = (0, 981)
 
-    setpointY     = 0
+    setpointY = 0
     setpointAngle = 0
 
     createFloor(space)
     rocket = Rocket(space,(WIDTH / 2, HEIGHT / 2))
     controller = Controller(rocket)
     
-    
-
     while running:
         # Does all rocket related tasks per frame             
         controller.angleSetpoint(setpointAngle)
@@ -215,13 +215,13 @@ def run(window, width, height):
                 if event.key == pygame.K_DOWN:
                     setpointY -= 5
                 if event.key == pygame.K_LEFT:
-                    setpointAngle -= 0.05
+                    setpointAngle -= 0.02
                 if event.key == pygame.K_RIGHT:
-                    setpointAngle += 0.05
+                    setpointAngle += 0.02
 
         controller.handle()
         rocket.handle()
-        print(rocket.bodyRocket.angle, rocket.getSpeedY())
+        #print(rocket.getSpeedX(), rocket.getSpeedY())
         
         draw(space, window)
         space.step(1 / FPS)
